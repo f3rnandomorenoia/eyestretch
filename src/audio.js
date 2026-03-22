@@ -252,6 +252,151 @@ export function createAudioController() {
         void unlockAudio();
     }
 
+    const htmlToneCache = new Map();
+    const activeHtmlPlayback = new Set();
+
+    function shouldPreferHtmlAudioPlayback() {
+        return isIosWebkitAudioEnvironment();
+    }
+
+    /**
+     * @param {number} phase
+     * @param {OscillatorType | 'triangle'} waveType
+     */
+    function sampleWave(phase, waveType) {
+        switch (waveType) {
+            case 'square':
+                return Math.sign(Math.sin(phase)) || 1;
+            case 'sawtooth': {
+                const normalized = phase / (Math.PI * 2);
+                return 2 * (normalized - Math.floor(normalized + 0.5));
+            }
+            case 'triangle':
+                return (2 / Math.PI) * Math.asin(Math.sin(phase));
+            case 'sine':
+            default:
+                return Math.sin(phase);
+        }
+    }
+
+    /**
+     * @param {{
+     *   totalDurationSeconds: number,
+     *   masterVolume: number,
+     *   waveType?: OscillatorType | 'triangle',
+     *   events: Array<{ frequency: number, startSeconds?: number, durationSeconds: number, gain?: number }>
+     * }} config
+     */
+    function createToneAudioDataUri(config) {
+        const key = JSON.stringify(config);
+        const cached = htmlToneCache.get(key);
+        if (cached) return cached;
+
+        const sampleRate = 44100;
+        const totalFrames = Math.max(1, Math.ceil(config.totalDurationSeconds * sampleRate));
+        const bytesPerSample = 2;
+        const numChannels = 1;
+        const blockAlign = numChannels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = totalFrames * blockAlign;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        const writeString = (offset, value) => {
+            for (let i = 0; i < value.length; i += 1) {
+                view.setUint8(offset + i, value.charCodeAt(i));
+            }
+        };
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        const waveType = config.waveType ?? 'triangle';
+
+        for (let frame = 0; frame < totalFrames; frame += 1) {
+            const time = frame / sampleRate;
+            let mixedSample = 0;
+
+            config.events.forEach(event => {
+                const startSeconds = event.startSeconds ?? 0;
+                const endSeconds = startSeconds + event.durationSeconds;
+                if (time < startSeconds || time > endSeconds) return;
+
+                const localTime = time - startSeconds;
+                const attack = Math.min(0.015, event.durationSeconds / 4);
+                const release = Math.min(0.08, event.durationSeconds / 3);
+                const attackGain = attack > 0 ? Math.min(1, localTime / attack) : 1;
+                const releaseGain = release > 0 ? Math.min(1, (endSeconds - time) / release) : 1;
+                const envelope = Math.max(0, Math.min(attackGain, releaseGain));
+                const amplitude = (event.gain ?? 1) * config.masterVolume;
+                mixedSample += sampleWave(localTime * event.frequency * Math.PI * 2, waveType) * amplitude * envelope;
+            });
+
+            const clamped = Math.max(-1, Math.min(1, mixedSample));
+            view.setInt16(44 + frame * 2, clamped * 0x7fff, true);
+        }
+
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        bytes.forEach(byte => {
+            binary += String.fromCharCode(byte);
+        });
+
+        const dataUri = `data:audio/wav;base64,${window.btoa(binary)}`;
+        htmlToneCache.set(key, dataUri);
+        return dataUri;
+    }
+
+    /**
+     * @param {{
+     *   totalDurationSeconds: number,
+     *   masterVolume: number,
+     *   waveType?: OscillatorType | 'triangle',
+     *   events: Array<{ frequency: number, startSeconds?: number, durationSeconds: number, gain?: number }>
+     * }} config
+     */
+    function playHtmlAudioPattern(config) {
+        if (typeof document === 'undefined' || !document.createElement) return;
+
+        try {
+            const audioEl = document.createElement('audio');
+            audioEl.setAttribute('x-webkit-airplay', 'deny');
+            audioEl.preload = 'auto';
+            audioEl.loop = false;
+            audioEl.playsInline = true;
+            audioEl.src = createToneAudioDataUri(config);
+            audioEl.load?.();
+
+            activeHtmlPlayback.add(audioEl);
+            const cleanup = () => {
+                activeHtmlPlayback.delete(audioEl);
+            };
+
+            audioEl.addEventListener?.('ended', cleanup, { once: true });
+            audioEl.addEventListener?.('error', cleanup, { once: true });
+
+            const playPromise = audioEl.play?.();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    cleanup();
+                });
+            }
+        } catch {
+            // ignore
+        }
+    }
+
     /**
      * @param {number} frequency
      * @param {number} durationSeconds
@@ -260,6 +405,16 @@ export function createAudioController() {
      */
     function playSingleTone(frequency, durationSeconds, volume, waveType = 'sine') {
         withReadyAudioContext(ctx => {
+            if (shouldPreferHtmlAudioPlayback()) {
+                playHtmlAudioPattern({
+                    totalDurationSeconds: durationSeconds,
+                    masterVolume: Math.max(0.15, Math.min(0.95, volume * 1.8)),
+                    waveType,
+                    events: [{ frequency, durationSeconds }]
+                });
+                return;
+            }
+
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
 
@@ -287,6 +442,19 @@ export function createAudioController() {
 
     function playOpenEyesBeep() {
         withReadyAudioContext(ctx => {
+            if (shouldPreferHtmlAudioPlayback()) {
+                playHtmlAudioPattern({
+                    totalDurationSeconds: 0.45,
+                    masterVolume: 0.42,
+                    waveType: 'triangle',
+                    events: [
+                        { frequency: 523.25, durationSeconds: 0.45, gain: 0.9 },
+                        { frequency: 659.25, durationSeconds: 0.45, gain: 0.9 }
+                    ]
+                });
+                return;
+            }
+
             const oscillator1 = ctx.createOscillator();
             const oscillator2 = ctx.createOscillator();
             const gainNode = ctx.createGain();
@@ -320,9 +488,24 @@ export function createAudioController() {
 
     function playSuccessSound() {
         withReadyAudioContext(ctx => {
-            const now = ctx.currentTime;
             const freqs = [523.25, 659.25, 783.99, 1046.5];
 
+            if (shouldPreferHtmlAudioPlayback()) {
+                playHtmlAudioPattern({
+                    totalDurationSeconds: 0.65,
+                    masterVolume: 0.38,
+                    waveType: 'triangle',
+                    events: freqs.map((frequency, i) => ({
+                        frequency,
+                        startSeconds: i * 0.1,
+                        durationSeconds: 0.32,
+                        gain: 0.95
+                    }))
+                });
+                return;
+            }
+
+            const now = ctx.currentTime;
             freqs.forEach((freq, i) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -344,6 +527,20 @@ export function createAudioController() {
 
     function playExerciseEndSound() {
         withReadyAudioContext(ctx => {
+            if (shouldPreferHtmlAudioPlayback()) {
+                playHtmlAudioPattern({
+                    totalDurationSeconds: 0.36,
+                    masterVolume: 0.38,
+                    waveType: 'triangle',
+                    events: [
+                        { frequency: 440, startSeconds: 0, durationSeconds: 0.16, gain: 1 },
+                        { frequency: 660, startSeconds: 0.1, durationSeconds: 0.16, gain: 0.95 },
+                        { frequency: 880, startSeconds: 0.2, durationSeconds: 0.16, gain: 0.9 }
+                    ]
+                });
+                return;
+            }
+
             const now = ctx.currentTime;
 
             const osc = ctx.createOscillator();

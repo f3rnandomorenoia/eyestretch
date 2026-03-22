@@ -5,6 +5,7 @@ import { createAudioController } from '../src/audio.js';
 let gestureActive = false;
 let pendingResumeResolvers = [];
 let htmlAudioUnlocked = false;
+let createdHtmlAudioElements = [];
 
 function withUserGesture(fn) {
   gestureActive = true;
@@ -137,6 +138,8 @@ class FakeHtmlAudioElement {
     this.playsInline = true;
     this.src = '';
     this.attributes = new Map();
+    this.playCount = 0;
+    createdHtmlAudioElements.push(this);
   }
 
   setAttribute(name, value) {
@@ -153,11 +156,12 @@ class FakeHtmlAudioElement {
 
   play() {
     return new Promise((resolve, reject) => {
-      if (!gestureActive) {
+      if (!gestureActive && !htmlAudioUnlocked) {
         reject(new Error('NotAllowedError'));
         return;
       }
 
+      this.playCount += 1;
       htmlAudioUnlocked = true;
       resolve();
     });
@@ -174,6 +178,7 @@ function installFakeDomEnvironment() {
   FakeAudioContext.lastInstance = null;
   pendingResumeResolvers = [];
   htmlAudioUnlocked = false;
+  createdHtmlAudioElements = [];
 
   global.window = {
     AudioContext: FakeAudioContext,
@@ -252,5 +257,27 @@ test('un beep disparado después del tap inicial sigue sonando tras el unlock', 
   await flushMicrotasks();
 
   assert.equal(FakeAudioContext.lastInstance?.state, 'running');
-  assert.equal(FakeAudioContext.lastInstance?.__audibleStarts, 1);
+
+  const nonLoopingHtmlAudioPlayed = createdHtmlAudioElements.filter(el => el.playCount > 0 && el.loop === false).length;
+  assert.ok(
+    FakeAudioContext.lastInstance?.__audibleStarts === 1 || nonLoopingHtmlAudioPlayed >= 1,
+    'expected audible playback via Web Audio or HTML audio fallback'
+  );
+});
+
+test('en iPhone simulado, los pitidos usan un fallback de HTML audio reproducible', async () => {
+  const audio = createAudioController();
+
+  withUserGesture(() => {
+    void audio.unlockAudio();
+  });
+
+  resolveAllPendingResumes();
+  await flushMicrotasks();
+
+  audio.playBlinkBeep();
+  await flushMicrotasks();
+
+  const playedNonLoopingHtmlAudio = createdHtmlAudioElements.filter(el => el.playCount > 0 && el.loop === false);
+  assert.ok(playedNonLoopingHtmlAudio.length >= 1, 'expected at least one non-looping HTML audio playback for the beep');
 });
