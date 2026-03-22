@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0f14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Eye Stretching - Ejercicios Oculares</title>
+    <meta name="description"
+        content="Rutinas de descanso visual: ejercicios guiados para relajar los ojos y reducir la fatiga de pantalla">
+    <link rel="stylesheet" href="index.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container" id="appContainer">
+        <!-- Header -->
+        <header class="header" id="header">
+            <h1 class="logo">
+                <img src="logo.png" alt="Eye Stretching Logo" class="logo-img">
+                Eye Stretching
+            </h1>
+            <p class="subtitle">Rutinas breves para descansar la vista</p>
+        </header>
+
+	        <!-- Screen Recommendation -->
+	        <div class="recommendation-banner">
+	            <p><strong>Recomendado: Pantalla de 13&quot; o más.</strong> Ajusta el brillo, mantén una distancia cómoda y
+	                para si notas molestia.</p>
+	        </div>
+
+        <!-- Tips Section (Moved to top) -->
+        <section class="tips-section" id="tipsSection">
+            <div class="tips-grid">
+                <div class="tip-card">
+                    <span class="tip-icon">🧘</span>
+                    <p>Cabeza quieta. Solo mueve los ojos.</p>
+                </div>
+                <div class="tip-card">
+                    <span class="tip-icon">😌</span>
+                    <p>Parpadea a menudo, sobre todo con pantallas.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Exercise Display Area -->
+        <main class="exercise-area" id="exerciseArea">
+            <div class="exercise-canvas" id="exerciseCanvas">
+                <div class="dot" id="dot"></div>
+                <div class="session-indicator" id="sessionIndicator" aria-live="polite">
+                    <div class="session-badges">
+                        <span class="badge" id="modeBadge">Ejercicio</span>
+                        <span class="badge badge-muted" id="statusBadge">Listo</span>
+                    </div>
+                    <div class="session-title" id="sessionTitle">Sin selección</div>
+                    <div class="session-subtitle" id="sessionSubtitle">Puedes empezar con una rutina o con un ejercicio suelto</div>
+                </div>
+                <div class="exercise-name" id="exerciseName">Elige un ejercicio o una rutina</div>
+                <div class="exercise-instruction" id="exerciseInstruction">
+                    Sigue el punto con la mirada, manteniendo la cabeza quieta
+                </div>
+                <button class="start-hint" id="startHint" type="button" hidden>Pulsa ▶ para empezar</button>
+                <div class="rotate-overlay" id="rotateOverlay" role="status" aria-live="polite">
+                    <div class="rotate-overlay-content">
+                        <div class="rotate-overlay-title">Gira el móvil a horizontal</div>
+                        <div class="rotate-overlay-subtitle">Para usar toda la pantalla.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timer and Controls -->
+            <div class="controls-bar" id="controlsBar">
+                <div class="timer-display">
+                    <span class="timer" id="timer">00:00</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+
+                <div class="control-buttons">
+                    <button class="control-btn" id="prevBtn" title="Anterior">
+                        <span>⏮️</span>
+                    </button>
+                    <button class="control-btn play-btn" id="playBtn" title="Play/Pausa">
+                        <span id="playIcon">▶️</span>
+                    </button>
+                    <button class="control-btn" id="stopBtn" title="Detener">
+                        <span>⏹️</span>
+                    </button>
+                    <button class="control-btn" id="nextBtn" title="Siguiente">
+                        <span>⏭️</span>
+                    </button>
+                </div>
+
+                <div class="speed-control">
+                    <label>Velocidad:</label>
+                    <select id="speedSelect">
+                        <option value="0.5">Lenta</option>
+                        <option value="1" selected>Normal</option>
+                        <option value="1.5">Rápida</option>
+                    </select>
+                </div>
+
+                <div class="dot-size-control">
+                    <label for="dotSizeSelect">Punto:</label>
+                    <select id="dotSizeSelect">
+                        <option value="20">Pequeño</option>
+                        <option value="26" selected>Medio</option>
+                        <option value="32">Grande</option>
+                    </select>
+                </div>
+
+                <button class="control-btn fullscreen-btn" id="fullscreenBtn" title="Pantalla Completa">
+                    <span id="fullscreenIcon">⛶</span>
+                </button>
+            </div>
+
+            <!-- Current Plan Display (moved next to the canvas for clarity) -->
+            <div class="current-plan" id="currentPlan" aria-live="polite">
+                <div class="current-plan-header">
+                    <div class="current-plan-title">
+                        <h3 id="currentPlanTitle">Rutina actual</h3>
+                        <p class="current-plan-meta" id="currentPlanMeta"></p>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="exitPlanBtn" type="button">Salir de la rutina</button>
+                </div>
+                <div class="plan-progress" id="planProgress"></div>
+            </div>
+        </main>
+
+        <!-- Plans Section -->
+        <section class="plans-section" id="plansSection">
+            <h2 class="section-title">Rutinas</h2>
+            <p class="section-subtitle">Elige una rutina y pulsa ▶ para empezar.</p>
+            <div class="plans-grid">
+                <button class="plan-card" data-plan="quick">
+                    <div class="plan-icon">⚡</div>
+                    <div class="plan-info">
+                        <h3>Alivio Rápido</h3>
+                        <p>5 min • Pantallas</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>😌</span><span>↕️</span><span>↔️</span><span>⭕</span><span>😌</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="complete">
+                    <div class="plan-icon">🧘</div>
+                    <div class="plan-info">
+                        <h3>Rutina Completa</h3>
+                        <p>10 min • Movilidad ocular</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>😌</span><span>↕️</span><span>⭕</span><span>∞</span><span>🕐</span><span>🔍</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="reading">
+                    <div class="plan-icon">📚</div>
+                    <div class="plan-info">
+                        <h3>Para Lectura</h3>
+                        <p>4 min • Enfoque</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>😌</span><span>↔️</span><span>⚡</span><span>⚡</span><span>😌</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="digital_break">
+                    <div class="plan-icon">🖥️</div>
+                    <div class="plan-info">
+                        <h3>Descanso Digital</h3>
+                        <p>3 min • Pausa</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>😌</span><span>🔭</span><span>🔍</span><span>💆</span><span>🤲</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="pro_training">
+                    <div class="plan-icon">🚀</div>
+                    <div class="plan-info">
+                        <h3>Entrenamiento Pro</h3>
+                        <p>6 min • Coordinación</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>📉</span><span>∞</span><span>🕐</span><span>🔤</span><span>⚡</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="total_relax">
+                    <div class="plan-icon">🕯️</div>
+                    <div class="plan-info">
+                        <h3>Relajación Total</h3>
+                        <p>4 min • Relajación</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>⭕</span><span>💆</span><span>🤲</span><span>😌</span>
+                    </div>
+                </button>
+                <button class="plan-card" data-plan="custom" id="customPlanBtn">
+                    <div class="plan-icon">✏️</div>
+                    <div class="plan-info">
+                        <h3>Rutina personalizada</h3>
+                        <p>Crea tu rutina</p>
+                    </div>
+                    <div class="plan-exercises">
+                        <span>+</span>
+                    </div>
+                </button>
+            </div>
+        </section>
+
+        <!-- Exercise Selection -->
+        <section class="exercises-section" id="exercisesSection">
+            <h2 class="section-title">Ejercicios</h2>
+            <p class="section-subtitle">Para repetir lo que más te ayuda o probar algo concreto.</p>
+            <div class="exercises-grid">
+                <button class="exercise-card" data-exercise="vertical">
+                    <span class="exercise-icon">↕️</span>
+                    <span class="exercise-label">Arriba/abajo</span>
+                    <span class="exercise-duration">30s</span>
+                </button>
+                <button class="exercise-card" data-exercise="horizontal">
+                    <span class="exercise-icon">↔️</span>
+                    <span class="exercise-label">Izq./der.</span>
+                    <span class="exercise-duration">30s</span>
+                </button>
+                <button class="exercise-card" data-exercise="circle">
+                    <span class="exercise-icon">⭕</span>
+                    <span class="exercise-label">Círculos</span>
+                    <span class="exercise-duration">48s</span>
+                </button>
+                <button class="exercise-card" data-exercise="infinity">
+                    <span class="exercise-icon">∞</span>
+                    <span class="exercise-label">Infinito</span>
+                    <span class="exercise-duration">45s</span>
+                </button>
+                <button class="exercise-card" data-exercise="diagonal">
+                    <span class="exercise-icon">↗️</span>
+                    <span class="exercise-label">Diagonales</span>
+                    <span class="exercise-duration">40s</span>
+                </button>
+                <button class="exercise-card" data-exercise="clock">
+                    <span class="exercise-icon">🕐</span>
+                    <span class="exercise-label">Reloj</span>
+                    <span class="exercise-duration">36s</span>
+                </button>
+                <button class="exercise-card" data-exercise="saccadic">
+                    <span class="exercise-icon">⚡</span>
+                    <span class="exercise-label">Saltos</span>
+                    <span class="exercise-duration">30s</span>
+                </button>
+                <button class="exercise-card" data-exercise="focus">
+                    <span class="exercise-icon">🔍</span>
+                    <span class="exercise-label">Cerca/lejos</span>
+                    <span class="exercise-duration">45s</span>
+                </button>
+                <button class="exercise-card" data-exercise="blink">
+                    <span class="exercise-icon">😌</span>
+                    <span class="exercise-label">Parpadeo</span>
+                    <span class="exercise-duration">30s</span>
+                </button>
+                <button class="exercise-card" data-exercise="zigzag">
+                    <span class="exercise-icon">📉</span>
+                    <span class="exercise-label">Zigzag</span>
+                    <span class="exercise-duration">30s</span>
+                </button>
+                <button class="exercise-card" data-exercise="palming">
+                    <span class="exercise-icon">🤲</span>
+                    <span class="exercise-label">Palmeo</span>
+                    <span class="exercise-duration">40s</span>
+                </button>
+                <button class="exercise-card" data-exercise="twenty">
+                    <span class="exercise-icon">🔭</span>
+                    <span class="exercise-label">20-20-20</span>
+                    <span class="exercise-duration">20s</span>
+                </button>
+                <button class="exercise-card" data-exercise="massage">
+                    <span class="exercise-icon">💆</span>
+                    <span class="exercise-label">Masaje suave</span>
+                    <span class="exercise-duration">60s</span>
+                </button>
+                <button class="exercise-card" data-exercise="abc">
+                    <span class="exercise-icon">🔤</span>
+                    <span class="exercise-label">Letras</span>
+                    <span class="exercise-duration">45s</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Custom Plan Modal -->
+        <div class="modal" id="customPlanModal">
+            <div class="modal-content">
+                <button class="modal-close" id="modalClose">✕</button>
+                <h2>Crea tu rutina</h2>
+                <p>Elige ejercicios y ordénalos arrastrando.</p>
+
+                <div class="custom-plan-builder">
+                    <div class="available-exercises">
+                        <h4>Ejercicios Disponibles</h4>
+                        <div class="exercise-list" id="availableExercises">
+                            <div class="draggable-exercise" data-exercise="blink" draggable="true">
+                                <span>😌</span> Parpadeo
+                            </div>
+                            <div class="draggable-exercise" data-exercise="vertical" draggable="true">
+                                <span>↕️</span> Arriba/Abajo
+                            </div>
+                            <div class="draggable-exercise" data-exercise="horizontal" draggable="true">
+                                <span>↔️</span> Izq/Derecha
+                            </div>
+                            <div class="draggable-exercise" data-exercise="circle" draggable="true">
+                                <span>⭕</span> Círculos
+                            </div>
+                            <div class="draggable-exercise" data-exercise="infinity" draggable="true">
+                                <span>∞</span> Infinito
+                            </div>
+                            <div class="draggable-exercise" data-exercise="diagonal" draggable="true">
+                                <span>↗️</span> Diagonales
+                            </div>
+                            <div class="draggable-exercise" data-exercise="clock" draggable="true">
+                                <span>🕐</span> Reloj
+                            </div>
+                            <div class="draggable-exercise" data-exercise="saccadic" draggable="true">
+                                <span>⚡</span> Saltos
+                            </div>
+                            <div class="draggable-exercise" data-exercise="focus" draggable="true">
+                                <span>🔍</span> Cerca/lejos
+                            </div>
+                            <div class="draggable-exercise" data-exercise="zigzag" draggable="true">
+                                <span>📉</span> Zigzag
+                            </div>
+                            <div class="draggable-exercise" data-exercise="palming" draggable="true">
+                                <span>🤲</span> Palmeo
+                            </div>
+                            <div class="draggable-exercise" data-exercise="twenty" draggable="true">
+                                <span>🔭</span> 20-20-20
+                            </div>
+                            <div class="draggable-exercise" data-exercise="massage" draggable="true">
+                                <span>💆</span> Masaje suave
+                            </div>
+                            <div class="draggable-exercise" data-exercise="abc" draggable="true">
+                                <span>🔤</span> Letras
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="selected-exercises">
+                        <h4>Tu rutina</h4>
+                        <div class="exercise-list dropzone" id="selectedExercises">
+                            <p class="empty-message">Arrastra ejercicios aquí</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="clearPlanBtn">Limpiar</button>
+                    <button class="btn btn-primary" id="startCustomPlanBtn">Empezar rutina</button>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <p><strong>Nota:</strong> Guía general. Si tienes dolor, visión doble o molestias persistentes, consulta a un
+                profesional.</p>
+        </footer>
+    </div>
+
+    <script type="module" src="index.js"></script>
+</body>
+
+</html>
