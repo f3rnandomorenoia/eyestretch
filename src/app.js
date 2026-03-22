@@ -1,10 +1,10 @@
 // @ts-check
 
-import { createAudioController } from './audio.js';
-import { getElements } from './dom.js';
-import { createExercises } from './exercises.js';
-import { PLANS } from './plans.js';
-import { createInitialState } from './state.js';
+import { createAudioController } from './audio.js?v=20260323b';
+import { getElements } from './dom.js?v=20260323b';
+import { createExercises } from './exercises.js?v=20260323b';
+import { PLANS } from './plans.js?v=20260323b';
+import { createInitialState } from './state.js?v=20260323b';
 
 export function createApp() {
     const state = createInitialState();
