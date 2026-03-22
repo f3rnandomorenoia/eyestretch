@@ -15,7 +15,6 @@
             --ok: #22c55e;
             --warn: #f59e0b;
             --bad: #ef4444;
-            --accent: #60a5fa;
             --border: rgba(255,255,255,0.08);
         }
 
@@ -28,7 +27,7 @@
         }
 
         .wrap {
-            max-width: 860px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 24px 16px 48px;
         }
@@ -122,18 +121,19 @@
             padding: 14px;
             border-radius: 12px;
             border: 1px solid var(--border);
-            min-height: 180px;
-            max-height: 360px;
+            min-height: 200px;
+            max-height: 380px;
             overflow: auto;
         }
 
         ol { margin-top: 8px; }
+        .small { font-size: 0.92rem; }
     </style>
 </head>
 <body>
     <div class="wrap">
         <h1>Test de audio para iPhone / Safari</h1>
-        <p class="muted">Esta página sirve para comprobar si el audio web queda desbloqueado correctamente y si los tonos de Eye Stretching deberían sonar en iPhone.</p>
+        <p class="muted">Esta página sirve para distinguir si el problema está en el desbloqueo de Web Audio, en el workaround de iPhone/Safari o en que el teléfono simplemente no está sacando audio.</p>
 
         <div class="panel">
             <div id="summaryBadge" class="badge warn">Estado inicial</div>
@@ -147,8 +147,16 @@
                     <span class="stat-value" id="primedState">-</span>
                 </div>
                 <div class="stat">
+                    <span class="stat-label">Workaround iPhone</span>
+                    <span class="stat-value" id="htmlAudioState">-</span>
+                </div>
+                <div class="stat">
                     <span class="stat-label">Tareas pendientes</span>
                     <span class="stat-value" id="pendingState">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Entorno iOS/WebKit</span>
+                    <span class="stat-value" id="iosEnvState">-</span>
                 </div>
                 <div class="stat">
                     <span class="stat-label">User agent</span>
@@ -162,17 +170,29 @@
             <ol>
                 <li>Abre esta página en el iPhone.</li>
                 <li>Pulsa <strong>Desbloquear audio</strong>.</li>
-                <li>Luego pulsa <strong>Secuencia de prueba</strong>.</li>
-                <li>Si oyes los tonos y el estado queda en <strong>running</strong>, el fix va bien.</li>
-                <li>Si no oyes nada y el estado se queda en <strong>suspended</strong>, sigue roto.</li>
+                <li>Pulsa <strong>Tono Web Audio (fuerte)</strong>.</li>
+                <li>Pulsa <strong>Tono HTML audio</strong>.</li>
+                <li class="small">Si suena el tono HTML pero no el de Web Audio, el problema es específico de Web Audio.</li>
+                <li class="small">Si no suena ninguno, entonces el iPhone no está sacando audio en Safari o el volumen físico/media está mal.</li>
+                <li class="small">Si el estado queda en <strong>running</strong> y el workaround en <strong>allowed</strong>, el fix técnico está activado.</li>
             </ol>
             <div class="actions">
                 <button id="unlockBtn" type="button">Desbloquear audio</button>
-                <button id="blinkBtn" type="button">Beep corto</button>
+                <button id="webToneBtn" type="button">Tono Web Audio (fuerte)</button>
+                <button id="htmlToneBtn" type="button">Tono HTML audio</button>
                 <button id="sequenceBtn" type="button">Secuencia de prueba</button>
                 <button id="refreshBtn" type="button">Refrescar estado</button>
                 <button id="clearLogBtn" type="button">Limpiar log</button>
             </div>
+        </div>
+
+        <div class="panel">
+            <strong>Interpretación rápida</strong>
+            <ul>
+                <li><strong>running + allowed + suena Web Audio</strong> → arreglado.</li>
+                <li><strong>running + allowed + suena HTML pero no Web Audio</strong> → sigue habiendo un problema en la ruta Web Audio.</li>
+                <li><strong>running + allowed + no suena ninguno</strong> → problema externo al fix (volumen/salida/sistema/Safari).</li>
+            </ul>
         </div>
 
         <div class="panel">

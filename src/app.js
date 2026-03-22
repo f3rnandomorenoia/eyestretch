@@ -786,12 +786,12 @@ export function createApp() {
             const willStart = !state.isPlaying;
             const willResume = state.isPlaying && state.isPaused;
 
-            if ((willStart || willResume) && !state.isFullscreen) {
-                void enterImmersiveMode();
+            if (willStart || willResume) {
+                void audio.unlockAudio();
             }
 
-            if (willStart || willResume) {
-                audio.unlockAudio();
+            if ((willStart || willResume) && !state.isFullscreen) {
+                void enterImmersiveMode();
             }
 
             if (!state.isPlaying && state.currentExercise) {

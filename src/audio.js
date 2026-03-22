@@ -10,7 +10,25 @@ export function createAudioController() {
     /** @type {Array<(ctx: AudioContext) => void>} */
     let pendingPlaybackTasks = [];
 
+    /** @type {HTMLAudioElement | null} */
+    let htmlUnmuteAudio = null;
+
+    /** @type {Promise<boolean> | null} */
+    let htmlUnmutePromise = null;
+
+    /** @type {'idle' | 'pending' | 'allowed' | 'failed' | 'not-needed'} */
+    let htmlAudioState = 'idle';
+
     let hasPrimedAudio = false;
+
+    function isIosWebkitAudioEnvironment() {
+        return !!(
+            typeof navigator !== 'undefined' &&
+            navigator.maxTouchPoints > 0 &&
+            typeof window !== 'undefined' &&
+            window.webkitAudioContext
+        );
+    }
 
     function getAudioContext() {
         if (!audioContext) {
@@ -38,6 +56,88 @@ export function createAudioController() {
                 // ignore individual playback failures
             }
         });
+    }
+
+    /**
+     * Safari/iPhone puede dejar Web Audio en `running` pero aún así seguir
+     * silenciado si el interruptor físico de silencio está activado. Este WAV
+     * silencioso por etiqueta <audio> fuerza la sesión de reproducción correcta.
+     * Basado en la técnica de `unmute-ios-audio`.
+     *
+     * @param {number} sampleRate
+     */
+    function createSilentAudioDataUri(sampleRate) {
+        const arrayBuffer = new ArrayBuffer(10);
+        const dataView = new DataView(arrayBuffer);
+
+        dataView.setUint32(0, sampleRate, true);
+        dataView.setUint32(4, sampleRate, true);
+        dataView.setUint16(8, 1, true);
+
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        bytes.forEach(byte => {
+            binary += String.fromCharCode(byte);
+        });
+
+        const missingCharacters = window.btoa(binary).slice(0, 13);
+        return `data:audio/wav;base64,UklGRisAAABXQVZFZm10IBAAAAABAAEA${missingCharacters}AgAZGF0YQcAAACAgICAgICAAAA=`;
+    }
+
+    function ensureHtmlUnmuteAudioElement(ctx) {
+        if (htmlUnmuteAudio || typeof document === 'undefined' || !document.createElement) {
+            return htmlUnmuteAudio;
+        }
+
+        const audioEl = document.createElement('audio');
+        audioEl.setAttribute('x-webkit-airplay', 'deny');
+        audioEl.preload = 'auto';
+        audioEl.loop = true;
+        audioEl.playsInline = true;
+        audioEl.src = createSilentAudioDataUri(typeof ctx.sampleRate === 'number' && ctx.sampleRate > 0 ? ctx.sampleRate : 44100);
+        audioEl.load();
+
+        htmlUnmuteAudio = audioEl;
+        return htmlUnmuteAudio;
+    }
+
+    async function ensureHtmlAudioUnlocked() {
+        if (!isIosWebkitAudioEnvironment()) {
+            htmlAudioState = 'not-needed';
+            return true;
+        }
+
+        if (htmlAudioState === 'allowed') {
+            return true;
+        }
+
+        if (htmlUnmutePromise) {
+            return htmlUnmutePromise;
+        }
+
+        htmlUnmutePromise = (async () => {
+            try {
+                const ctx = getAudioContext();
+                const audioEl = ensureHtmlUnmuteAudioElement(ctx);
+
+                if (!audioEl || typeof audioEl.play !== 'function') {
+                    htmlAudioState = 'failed';
+                    htmlUnmutePromise = null;
+                    return false;
+                }
+
+                htmlAudioState = 'pending';
+                await audioEl.play();
+                htmlAudioState = 'allowed';
+                return true;
+            } catch {
+                htmlAudioState = 'failed';
+                htmlUnmutePromise = null;
+                return false;
+            }
+        })();
+
+        return htmlUnmutePromise;
     }
 
     /**
@@ -91,7 +191,7 @@ export function createAudioController() {
             return Promise.resolve(false);
         }
 
-        if (ctx.state === 'running') {
+        if (ctx.state === 'running' && (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment())) {
             flushPendingPlaybackTasks();
             return Promise.resolve(true);
         }
@@ -102,16 +202,24 @@ export function createAudioController() {
 
         unlockPromise = (async () => {
             try {
+                const htmlAudioPromise = ensureHtmlAudioUnlocked();
+
                 primeAudioContext(ctx);
 
                 if (typeof ctx.resume === 'function' && ctx.state !== 'running') {
                     await ctx.resume();
                 }
+
+                await htmlAudioPromise;
             } catch {
                 // ignore and let the caller retry on the next user gesture
             }
 
-            if (ctx.state === 'running') {
+            const isReady =
+                ctx.state === 'running' &&
+                (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment());
+
+            if (isReady) {
                 flushPendingPlaybackTasks();
                 return true;
             }
@@ -134,7 +242,8 @@ export function createAudioController() {
             return;
         }
 
-        if (ctx.state === 'running') {
+        const htmlReady = htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment();
+        if (ctx.state === 'running' && htmlReady) {
             task(ctx);
             return;
         }
@@ -147,8 +256,9 @@ export function createAudioController() {
      * @param {number} frequency
      * @param {number} durationSeconds
      * @param {number} volume
+     * @param {OscillatorType} [waveType]
      */
-    function playSingleTone(frequency, durationSeconds, volume) {
+    function playSingleTone(frequency, durationSeconds, volume, waveType = 'sine') {
         withReadyAudioContext(ctx => {
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
@@ -157,7 +267,7 @@ export function createAudioController() {
             gainNode.connect(ctx.destination);
 
             oscillator.frequency.value = frequency;
-            oscillator.type = 'sine';
+            oscillator.type = waveType;
 
             gainNode.gain.setValueAtTime(volume, ctx.currentTime);
             gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + durationSeconds);
@@ -168,11 +278,11 @@ export function createAudioController() {
     }
 
     function playBlinkBeep() {
-        playSingleTone(659.25, 0.15, 0.15);
+        playSingleTone(659.25, 0.18, 0.22, 'triangle');
     }
 
     function playCloseEyesBeep() {
-        playSingleTone(440, 0.3, 0.2);
+        playSingleTone(440, 0.35, 0.24, 'triangle');
     }
 
     function playOpenEyesBeep() {
@@ -187,25 +297,25 @@ export function createAudioController() {
 
             oscillator1.frequency.value = 523.25; // C5
             oscillator2.frequency.value = 659.25; // E5
-            oscillator1.type = 'sine';
-            oscillator2.type = 'sine';
+            oscillator1.type = 'triangle';
+            oscillator2.type = 'triangle';
 
-            gainNode.gain.setValueAtTime(0.25, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
 
             oscillator1.start(ctx.currentTime);
             oscillator2.start(ctx.currentTime);
-            oscillator1.stop(ctx.currentTime + 0.4);
-            oscillator2.stop(ctx.currentTime + 0.4);
+            oscillator1.stop(ctx.currentTime + 0.45);
+            oscillator2.stop(ctx.currentTime + 0.45);
         });
     }
 
     function playNearBeep() {
-        playSingleTone(783.99, 0.15, 0.15);
+        playSingleTone(783.99, 0.18, 0.22, 'triangle');
     }
 
     function playFarBeep() {
-        playSingleTone(523.25, 0.15, 0.15);
+        playSingleTone(523.25, 0.18, 0.22, 'triangle');
     }
 
     function playSuccessSound() {
@@ -218,16 +328,16 @@ export function createAudioController() {
                 const gain = ctx.createGain();
 
                 osc.frequency.setValueAtTime(freq, now + i * 0.1);
-                osc.type = 'sine';
+                osc.type = 'triangle';
 
                 gain.gain.setValueAtTime(0, now + i * 0.1);
-                gain.gain.linearRampToValueAtTime(0.2, now + i * 0.1 + 0.05);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.3);
+                gain.gain.linearRampToValueAtTime(0.24, now + i * 0.1 + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.32);
                 osc.connect(gain);
                 gain.connect(ctx.destination);
 
                 osc.start(now + i * 0.1);
-                osc.stop(now + i * 0.1 + 0.3);
+                osc.stop(now + i * 0.1 + 0.32);
             });
         });
     }
@@ -239,19 +349,23 @@ export function createAudioController() {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
-            osc.type = 'sine';
+            osc.type = 'triangle';
             osc.frequency.setValueAtTime(440, now);
-            osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.24);
 
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.34);
 
             osc.connect(gain);
             gain.connect(ctx.destination);
 
             osc.start(now);
-            osc.stop(now + 0.3);
+            osc.stop(now + 0.34);
         });
+    }
+
+    function playDiagnosticTone() {
+        playSingleTone(880, 1.1, 0.42, 'triangle');
     }
 
     function getDebugState() {
@@ -259,7 +373,10 @@ export function createAudioController() {
             supported: !!(window.AudioContext || window.webkitAudioContext),
             contextState: audioContext?.state ?? 'not-created',
             hasPrimedAudio,
-            pendingPlaybackTasks: pendingPlaybackTasks.length
+            pendingPlaybackTasks: pendingPlaybackTasks.length,
+            iosWebkitAudioEnvironment: isIosWebkitAudioEnvironment(),
+            htmlAudioState,
+            htmlUnmuteActive: !!htmlUnmuteAudio
         };
     }
 
@@ -272,6 +389,7 @@ export function createAudioController() {
         playFarBeep,
         playSuccessSound,
         playExerciseEndSound,
+        playDiagnosticTone,
         getDebugState
     };
 }
