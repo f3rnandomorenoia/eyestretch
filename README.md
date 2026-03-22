@@ -23,3 +23,20 @@ Luego abre `http://127.0.0.1:8000`.
 - `src/dom.js`: obtención de elementos del DOM.
 - `src/state.js`: estado inicial.
 
+## Test de audio en iPhone / Safari
+
+Hay una página de diagnóstico en `audio-test.html` para comprobar si el audio queda desbloqueado correctamente en iPhone/Safari.
+
+Flujo recomendado:
+
+1. Abrir `audio-test.html` en el iPhone.
+2. Pulsar **Desbloquear audio**.
+3. Pulsar **Secuencia de prueba**.
+4. Si el estado queda en `running` y se oyen los tonos, el audio está funcionando.
+
+Además, hay tests automatizados en `tests/`:
+
+```bash
+npm test
+```
+

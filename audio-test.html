@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Eye Stretching · Test de audio</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b0f14;
+            --panel: #131a24;
+            --panel-2: #1a2330;
+            --text: #eef2f7;
+            --muted: #9aa7b8;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --bad: #ef4444;
+            --accent: #60a5fa;
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(180deg, #0b0f14 0%, #111827 100%);
+            color: var(--text);
+        }
+
+        .wrap {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 24px 16px 48px;
+        }
+
+        h1 { margin: 0 0 8px; font-size: 1.8rem; }
+        p, li { line-height: 1.55; }
+        .muted { color: var(--muted); }
+
+        .panel {
+            background: rgba(19, 26, 36, 0.92);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 16px;
+            backdrop-filter: blur(10px);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 700;
+            word-break: break-word;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 999px;
+            padding: 8px 12px;
+            font-weight: 700;
+            border: 1px solid var(--border);
+        }
+
+        .badge.ok { color: #d1fae5; background: rgba(34, 197, 94, 0.14); }
+        .badge.warn { color: #fef3c7; background: rgba(245, 158, 11, 0.14); }
+        .badge.bad { color: #fee2e2; background: rgba(239, 68, 68, 0.14); }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        button {
+            appearance: none;
+            border: 1px solid rgba(96, 165, 250, 0.32);
+            background: rgba(96, 165, 250, 0.12);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover { background: rgba(96, 165, 250, 0.18); }
+        button:active { transform: translateY(1px); }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.88rem;
+            line-height: 1.5;
+            color: #dbe6f3;
+            background: #09101a;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            min-height: 180px;
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        ol { margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>Test de audio para iPhone / Safari</h1>
+        <p class="muted">Esta página sirve para comprobar si el audio web queda desbloqueado correctamente y si los tonos de Eye Stretching deberían sonar en iPhone.</p>
+
+        <div class="panel">
+            <div id="summaryBadge" class="badge warn">Estado inicial</div>
+            <div class="grid" style="margin-top:16px;">
+                <div class="stat">
+                    <span class="stat-label">AudioContext</span>
+                    <span class="stat-value" id="audioState">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Audio primado</span>
+                    <span class="stat-value" id="primedState">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Tareas pendientes</span>
+                    <span class="stat-value" id="pendingState">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">User agent</span>
+                    <span class="stat-value" id="uaState">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <strong>Cómo usarlo</strong>
+            <ol>
+                <li>Abre esta página en el iPhone.</li>
+                <li>Pulsa <strong>Desbloquear audio</strong>.</li>
+                <li>Luego pulsa <strong>Secuencia de prueba</strong>.</li>
+                <li>Si oyes los tonos y el estado queda en <strong>running</strong>, el fix va bien.</li>
+                <li>Si no oyes nada y el estado se queda en <strong>suspended</strong>, sigue roto.</li>
+            </ol>
+            <div class="actions">
+                <button id="unlockBtn" type="button">Desbloquear audio</button>
+                <button id="blinkBtn" type="button">Beep corto</button>
+                <button id="sequenceBtn" type="button">Secuencia de prueba</button>
+                <button id="refreshBtn" type="button">Refrescar estado</button>
+                <button id="clearLogBtn" type="button">Limpiar log</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <strong>Log de diagnóstico</strong>
+            <pre id="log"></pre>
+        </div>
+    </div>
+
+    <script type="module" src="audio-test.js"></script>
+</body>
+</html>
