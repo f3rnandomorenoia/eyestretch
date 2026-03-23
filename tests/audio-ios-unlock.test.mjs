@@ -174,7 +174,7 @@ function resolveAllPendingResumes() {
   resolvers.forEach(resolve => resolve());
 }
 
-function installFakeDomEnvironment() {
+function installFakeDomEnvironment({ includeWebkitAudioContext = true, platform = 'iPhone' } = {}) {
   FakeAudioContext.lastInstance = null;
   pendingResumeResolvers = [];
   htmlAudioUnlocked = false;
@@ -182,7 +182,7 @@ function installFakeDomEnvironment() {
 
   global.window = {
     AudioContext: FakeAudioContext,
-    webkitAudioContext: FakeAudioContext,
+    ...(includeWebkitAudioContext ? { webkitAudioContext: FakeAudioContext } : {}),
     btoa: input => Buffer.from(input, 'binary').toString('base64')
   };
 
@@ -199,6 +199,7 @@ function installFakeDomEnvironment() {
     configurable: true,
     value: {
       maxTouchPoints: 5,
+      platform,
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile Safari/604.1'
     }
   });
@@ -239,6 +240,24 @@ test('en iPhone simulado con mute switch, unlockAudio activa el workaround HTML 
 
   const debug = audio.getDebugState();
   assert.equal(debug.contextState, 'running');
+  assert.equal(debug.htmlAudioState, 'allowed');
+  assert.equal(htmlAudioUnlocked, true);
+});
+
+test('en Safari moderno de iPhone, aunque no exista webkitAudioContext, activa igualmente el fallback HTML audio', async () => {
+  installFakeDomEnvironment({ includeWebkitAudioContext: false, platform: 'iPhone' });
+  const audio = createAudioController();
+
+  withUserGesture(() => {
+    void audio.unlockAudio();
+  });
+
+  resolveAllPendingResumes();
+  await flushMicrotasks();
+
+  const debug = audio.getDebugState();
+  assert.equal(debug.contextState, 'running');
+  assert.equal(debug.iosWebkitAudioEnvironment, true);
   assert.equal(debug.htmlAudioState, 'allowed');
   assert.equal(htmlAudioUnlocked, true);
 });

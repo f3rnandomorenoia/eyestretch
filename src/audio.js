@@ -22,12 +22,19 @@ export function createAudioController() {
     let hasPrimedAudio = false;
 
     function isIosWebkitAudioEnvironment() {
-        return !!(
-            typeof navigator !== 'undefined' &&
-            navigator.maxTouchPoints > 0 &&
-            typeof window !== 'undefined' &&
-            window.webkitAudioContext
-        );
+        if (typeof navigator === 'undefined' || typeof window === 'undefined') {
+            return false;
+        }
+
+        const ua = navigator.userAgent || '';
+        const platform = navigator.platform || '';
+        const touchPoints = navigator.maxTouchPoints || 0;
+
+        const isiPhoneOrIPadUA = /iPad|iPhone|iPod/i.test(ua);
+        const isiPadOsDesktopMode = platform === 'MacIntel' && touchPoints > 1;
+        const hasWebAudio = !!(window.AudioContext || window.webkitAudioContext);
+
+        return hasWebAudio && (isiPhoneOrIPadUA || isiPadOsDesktopMode);
     }
 
     function getAudioContext() {
