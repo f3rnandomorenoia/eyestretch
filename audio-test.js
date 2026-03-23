@@ -1,4 +1,4 @@
-import { createAudioController } from './src/audio.js?v=20260323d';
+import { createAudioController } from './src/audio.js?v=20260323e';
 
 const audio = createAudioController();
 

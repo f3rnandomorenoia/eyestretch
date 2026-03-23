@@ -1,6 +1,6 @@
 // @ts-check
 
-import { init } from './src/main.js?v=20260323d';
+import { init } from './src/main.js?v=20260323e';
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

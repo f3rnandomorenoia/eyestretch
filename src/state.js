@@ -22,6 +22,7 @@ export function createInitialState() {
         textFadeTimeout: null,
         lastBlinkCount: -1,
         hasPlayedCloseEyes: false,
+        hasPlayedOpenEyes: false,
         lastFocusPhase: null,
         lastDirection: null
     };

@@ -1,10 +1,10 @@
 // @ts-check
 
-import { createAudioController } from './audio.js?v=20260323d';
-import { getElements } from './dom.js?v=20260323d';
-import { createExercises } from './exercises.js?v=20260323d';
-import { PLANS } from './plans.js?v=20260323d';
-import { createInitialState } from './state.js?v=20260323d';
+import { createAudioController } from './audio.js?v=20260323e';
+import { getElements } from './dom.js?v=20260323e';
+import { createExercises } from './exercises.js?v=20260323e';
+import { PLANS } from './plans.js?v=20260323e';
+import { createInitialState } from './state.js?v=20260323e';
 
 export function createApp() {
     const state = createInitialState();
@@ -215,6 +215,7 @@ export function createApp() {
 
         state.lastBlinkCount = -1;
         state.hasPlayedCloseEyes = false;
+        state.hasPlayedOpenEyes = false;
         state.lastFocusPhase = null;
         state.lastDirection = null;
 

@@ -262,13 +262,20 @@ export function createExercises({ state, elements, audio }) {
 
         if (elapsed > 20) {
             if (elements.exerciseInstruction) {
-                elements.exerciseInstruction.textContent = 'Cierra los ojos y descansa...';
+                elements.exerciseInstruction.textContent = elapsed >= 29
+                    ? 'Abre los ojos. Hemos terminado.'
+                    : 'Cierra los ojos y descansa...';
                 elements.exerciseInstruction.classList.remove('fade-out');
             }
 
             if (!state.hasPlayedCloseEyes) {
                 audio.playCloseEyesBeep();
                 state.hasPlayedCloseEyes = true;
+            }
+
+            if (elapsed >= 29 && !state.hasPlayedOpenEyes) {
+                audio.playOpenEyesBeep();
+                state.hasPlayedOpenEyes = true;
             }
 
             elements.dot.style.opacity = String(Math.max(0, 1 - (elapsed - 20) / 5));
