@@ -1,4 +1,4 @@
-import { createAudioController } from './src/audio.js?v=20260323c';
+import { createAudioController } from './src/audio.js?v=20260323d';
 
 const audio = createAudioController();
 
@@ -7,6 +7,7 @@ const elements = {
     audioState: document.getElementById('audioState'),
     primedState: document.getElementById('primedState'),
     htmlAudioState: document.getElementById('htmlAudioState'),
+    htmlPatternAudioState: document.getElementById('htmlPatternAudioState'),
     pendingState: document.getElementById('pendingState'),
     iosEnvState: document.getElementById('iosEnvState'),
     uaState: document.getElementById('uaState'),
@@ -78,6 +79,7 @@ function renderState() {
     elements.audioState.textContent = state.contextState;
     elements.primedState.textContent = state.hasPrimedAudio ? 'sí' : 'no';
     elements.htmlAudioState.textContent = state.htmlAudioState;
+    elements.htmlPatternAudioState.textContent = state.htmlPatternAudioState ?? '-';
     elements.pendingState.textContent = String(state.pendingPlaybackTasks);
     elements.iosEnvState.textContent = state.iosWebkitAudioEnvironment ? 'sí' : 'no';
     elements.uaState.textContent = navigator.userAgent;
@@ -110,14 +112,14 @@ async function unlockAudio() {
     log('Intentando desbloquear audio...');
     const ok = await audio.unlockAudio();
     const state = renderState();
-    log(`unlockAudio() => ${ok ? 'ok' : 'fail'} | contextState=${state.contextState} | primed=${state.hasPrimedAudio} | htmlAudioState=${state.htmlAudioState}`);
+    log(`unlockAudio() => ${ok ? 'ok' : 'fail'} | contextState=${state.contextState} | primed=${state.hasPrimedAudio} | htmlAudioState=${state.htmlAudioState} | htmlPatternAudioState=${state.htmlPatternAudioState}`);
     return ok;
 }
 
 function playWebTone() {
     audio.playDiagnosticTone();
     const state = renderState();
-    log(`Tono Web Audio lanzado | contextState=${state.contextState} | htmlAudioState=${state.htmlAudioState} | pending=${state.pendingPlaybackTasks}`);
+    log(`Tono Web Audio lanzado | contextState=${state.contextState} | htmlAudioState=${state.htmlAudioState} | htmlPatternAudioState=${state.htmlPatternAudioState} | pending=${state.pendingPlaybackTasks}`);
 }
 
 async function playHtmlTone() {
@@ -144,7 +146,7 @@ async function playSequence() {
     setTimeout(() => audio.playSuccessSound(), 2200);
     setTimeout(() => {
         const state = renderState();
-        log(`Fin de secuencia | contextState=${state.contextState} | htmlAudioState=${state.htmlAudioState} | pending=${state.pendingPlaybackTasks}`);
+        log(`Fin de secuencia | contextState=${state.contextState} | htmlAudioState=${state.htmlAudioState} | htmlPatternAudioState=${state.htmlPatternAudioState} | pending=${state.pendingPlaybackTasks}`);
     }, 2900);
 }
 
@@ -166,7 +168,7 @@ elements.sequenceBtn.addEventListener('click', () => {
 
 elements.refreshBtn.addEventListener('click', () => {
     const state = renderState();
-    log(`Estado refrescado | contextState=${state.contextState} | primed=${state.hasPrimedAudio} | htmlAudioState=${state.htmlAudioState}`);
+    log(`Estado refrescado | contextState=${state.contextState} | primed=${state.hasPrimedAudio} | htmlAudioState=${state.htmlAudioState} | htmlPatternAudioState=${state.htmlPatternAudioState}`);
 });
 
 elements.clearLogBtn.addEventListener('click', () => {

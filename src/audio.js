@@ -198,7 +198,11 @@ export function createAudioController() {
             return Promise.resolve(false);
         }
 
-        if (ctx.state === 'running' && (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment())) {
+        if (
+            ctx.state === 'running' &&
+            (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment()) &&
+            (htmlPatternAudioState === 'allowed' || htmlPatternAudioState === 'not-needed' || !shouldPreferHtmlAudioPlayback())
+        ) {
             flushPendingPlaybackTasks();
             return Promise.resolve(true);
         }
@@ -210,6 +214,7 @@ export function createAudioController() {
         unlockPromise = (async () => {
             try {
                 const htmlAudioPromise = ensureHtmlAudioUnlocked();
+                const htmlPatternPromise = primeKnownHtmlPatternPlayers();
 
                 primeAudioContext(ctx);
 
@@ -218,13 +223,15 @@ export function createAudioController() {
                 }
 
                 await htmlAudioPromise;
+                await htmlPatternPromise;
             } catch {
                 // ignore and let the caller retry on the next user gesture
             }
 
             const isReady =
                 ctx.state === 'running' &&
-                (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment());
+                (htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment()) &&
+                (htmlPatternAudioState === 'allowed' || htmlPatternAudioState === 'not-needed' || !shouldPreferHtmlAudioPlayback());
 
             if (isReady) {
                 flushPendingPlaybackTasks();
@@ -250,7 +257,8 @@ export function createAudioController() {
         }
 
         const htmlReady = htmlAudioState === 'allowed' || htmlAudioState === 'not-needed' || !isIosWebkitAudioEnvironment();
-        if (ctx.state === 'running' && htmlReady) {
+        const htmlPatternReady = htmlPatternAudioState === 'allowed' || htmlPatternAudioState === 'not-needed' || !shouldPreferHtmlAudioPlayback();
+        if (ctx.state === 'running' && htmlReady && htmlPatternReady) {
             task(ctx);
             return;
         }
@@ -260,7 +268,11 @@ export function createAudioController() {
     }
 
     const htmlToneCache = new Map();
-    const activeHtmlPlayback = new Set();
+
+    /** @type {Map<string, { config: any, players: HTMLAudioElement[], nextIndex: number, primed: boolean }>} */
+    const htmlPatternPlayers = new Map();
+
+    let htmlPatternAudioState = 'idle';
 
     function shouldPreferHtmlAudioPlayback() {
         return isIosWebkitAudioEnvironment();
@@ -366,6 +378,185 @@ export function createAudioController() {
     }
 
     /**
+     * @param {number} frequency
+     * @param {number} durationSeconds
+     * @param {number} volume
+     * @param {OscillatorType | 'triangle'} [waveType]
+     */
+    function createSingleToneConfig(frequency, durationSeconds, volume, waveType = 'triangle') {
+        return {
+            totalDurationSeconds: durationSeconds,
+            masterVolume: Math.max(0.15, Math.min(0.95, volume * 1.8)),
+            waveType,
+            events: [{ frequency, durationSeconds, gain: 1 }]
+        };
+    }
+
+    function getBlinkToneConfig() {
+        return createSingleToneConfig(659.25, 0.18, 0.22, 'triangle');
+    }
+
+    function getCloseEyesToneConfig() {
+        return createSingleToneConfig(440, 0.35, 0.24, 'triangle');
+    }
+
+    function getNearToneConfig() {
+        return createSingleToneConfig(783.99, 0.18, 0.22, 'triangle');
+    }
+
+    function getFarToneConfig() {
+        return createSingleToneConfig(523.25, 0.18, 0.22, 'triangle');
+    }
+
+    function getDiagnosticToneConfig() {
+        return createSingleToneConfig(880, 1.1, 0.42, 'triangle');
+    }
+
+    function getOpenEyesToneConfig() {
+        return {
+            totalDurationSeconds: 0.45,
+            masterVolume: 0.42,
+            waveType: 'triangle',
+            events: [
+                { frequency: 523.25, durationSeconds: 0.45, gain: 0.9 },
+                { frequency: 659.25, durationSeconds: 0.45, gain: 0.9 }
+            ]
+        };
+    }
+
+    function getSuccessToneConfig() {
+        const freqs = [523.25, 659.25, 783.99, 1046.5];
+        return {
+            totalDurationSeconds: 0.65,
+            masterVolume: 0.38,
+            waveType: 'triangle',
+            events: freqs.map((frequency, i) => ({
+                frequency,
+                startSeconds: i * 0.1,
+                durationSeconds: 0.32,
+                gain: 0.95
+            }))
+        };
+    }
+
+    function getExerciseEndToneConfig() {
+        return {
+            totalDurationSeconds: 0.36,
+            masterVolume: 0.38,
+            waveType: 'triangle',
+            events: [
+                { frequency: 440, startSeconds: 0, durationSeconds: 0.16, gain: 1 },
+                { frequency: 660, startSeconds: 0.1, durationSeconds: 0.16, gain: 0.95 },
+                { frequency: 880, startSeconds: 0.2, durationSeconds: 0.16, gain: 0.9 }
+            ]
+        };
+    }
+
+    function getKnownHtmlToneConfigs() {
+        return [
+            getBlinkToneConfig(),
+            getCloseEyesToneConfig(),
+            getNearToneConfig(),
+            getFarToneConfig(),
+            getDiagnosticToneConfig(),
+            getOpenEyesToneConfig(),
+            getSuccessToneConfig(),
+            getExerciseEndToneConfig()
+        ];
+    }
+
+    /**
+     * @param {{
+     *   totalDurationSeconds: number,
+     *   masterVolume: number,
+     *   waveType?: OscillatorType | 'triangle',
+     *   events: Array<{ frequency: number, startSeconds?: number, durationSeconds: number, gain?: number }>
+     * }} config
+     */
+    function ensureHtmlPatternEntry(config) {
+        const key = JSON.stringify(config);
+        const existing = htmlPatternPlayers.get(key);
+        if (existing) return existing;
+
+        if (typeof document === 'undefined' || !document.createElement) {
+            const emptyEntry = { config, players: [], nextIndex: 0, primed: false };
+            htmlPatternPlayers.set(key, emptyEntry);
+            return emptyEntry;
+        }
+
+        const players = Array.from({ length: 2 }, () => {
+            const audioEl = document.createElement('audio');
+            audioEl.setAttribute('x-webkit-airplay', 'deny');
+            audioEl.preload = 'auto';
+            audioEl.loop = false;
+            audioEl.playsInline = true;
+            audioEl.src = createToneAudioDataUri(config);
+            audioEl.load?.();
+            return audioEl;
+        });
+
+        const entry = { config, players, nextIndex: 0, primed: false };
+        htmlPatternPlayers.set(key, entry);
+        return entry;
+    }
+
+    async function primeHtmlPatternEntry(entry) {
+        if (!shouldPreferHtmlAudioPlayback()) {
+            htmlPatternAudioState = 'not-needed';
+            return true;
+        }
+
+        if (entry.primed) return true;
+        if (!entry.players.length) {
+            htmlPatternAudioState = 'failed';
+            return false;
+        }
+
+        htmlPatternAudioState = 'pending';
+        let primedCount = 0;
+
+        for (const audioEl of entry.players) {
+            try {
+                audioEl.muted = true;
+                audioEl.currentTime = 0;
+                const playPromise = audioEl.play?.();
+                if (playPromise && typeof playPromise.then === 'function') {
+                    await playPromise;
+                }
+                audioEl.pause?.();
+                audioEl.currentTime = 0;
+                audioEl.muted = false;
+                primedCount += 1;
+            } catch {
+                try {
+                    audioEl.pause?.();
+                    audioEl.currentTime = 0;
+                    audioEl.muted = false;
+                } catch {
+                    // ignore
+                }
+            }
+        }
+
+        entry.primed = primedCount > 0;
+        htmlPatternAudioState = entry.primed ? 'allowed' : 'failed';
+        return entry.primed;
+    }
+
+    async function primeKnownHtmlPatternPlayers() {
+        if (!shouldPreferHtmlAudioPlayback()) {
+            htmlPatternAudioState = 'not-needed';
+            return true;
+        }
+
+        const entries = getKnownHtmlToneConfigs().map(config => ensureHtmlPatternEntry(config));
+        const results = await Promise.all(entries.map(entry => primeHtmlPatternEntry(entry)));
+        const ok = results.some(Boolean);
+        htmlPatternAudioState = ok ? 'allowed' : 'failed';
+        return ok;
+    }
+
+    /**
      * @param {{
      *   totalDurationSeconds: number,
      *   masterVolume: number,
@@ -374,29 +565,20 @@ export function createAudioController() {
      * }} config
      */
     function playHtmlAudioPattern(config) {
-        if (typeof document === 'undefined' || !document.createElement) return;
+        const entry = ensureHtmlPatternEntry(config);
+        if (!entry.players.length) return;
+
+        const audioEl = entry.players[entry.nextIndex % entry.players.length];
+        entry.nextIndex = (entry.nextIndex + 1) % entry.players.length;
 
         try {
-            const audioEl = document.createElement('audio');
-            audioEl.setAttribute('x-webkit-airplay', 'deny');
-            audioEl.preload = 'auto';
-            audioEl.loop = false;
-            audioEl.playsInline = true;
-            audioEl.src = createToneAudioDataUri(config);
-            audioEl.load?.();
-
-            activeHtmlPlayback.add(audioEl);
-            const cleanup = () => {
-                activeHtmlPlayback.delete(audioEl);
-            };
-
-            audioEl.addEventListener?.('ended', cleanup, { once: true });
-            audioEl.addEventListener?.('error', cleanup, { once: true });
-
+            audioEl.pause?.();
+            audioEl.muted = false;
+            audioEl.currentTime = 0;
             const playPromise = audioEl.play?.();
             if (playPromise && typeof playPromise.catch === 'function') {
                 playPromise.catch(() => {
-                    cleanup();
+                    // ignore playback rejection on Safari
                 });
             }
         } catch {
@@ -413,12 +595,7 @@ export function createAudioController() {
     function playSingleTone(frequency, durationSeconds, volume, waveType = 'sine') {
         withReadyAudioContext(ctx => {
             if (shouldPreferHtmlAudioPlayback()) {
-                playHtmlAudioPattern({
-                    totalDurationSeconds: durationSeconds,
-                    masterVolume: Math.max(0.15, Math.min(0.95, volume * 1.8)),
-                    waveType,
-                    events: [{ frequency, durationSeconds }]
-                });
+                playHtmlAudioPattern(createSingleToneConfig(frequency, durationSeconds, volume, waveType));
                 return;
             }
 
@@ -450,15 +627,7 @@ export function createAudioController() {
     function playOpenEyesBeep() {
         withReadyAudioContext(ctx => {
             if (shouldPreferHtmlAudioPlayback()) {
-                playHtmlAudioPattern({
-                    totalDurationSeconds: 0.45,
-                    masterVolume: 0.42,
-                    waveType: 'triangle',
-                    events: [
-                        { frequency: 523.25, durationSeconds: 0.45, gain: 0.9 },
-                        { frequency: 659.25, durationSeconds: 0.45, gain: 0.9 }
-                    ]
-                });
+                playHtmlAudioPattern(getOpenEyesToneConfig());
                 return;
             }
 
@@ -498,17 +667,7 @@ export function createAudioController() {
             const freqs = [523.25, 659.25, 783.99, 1046.5];
 
             if (shouldPreferHtmlAudioPlayback()) {
-                playHtmlAudioPattern({
-                    totalDurationSeconds: 0.65,
-                    masterVolume: 0.38,
-                    waveType: 'triangle',
-                    events: freqs.map((frequency, i) => ({
-                        frequency,
-                        startSeconds: i * 0.1,
-                        durationSeconds: 0.32,
-                        gain: 0.95
-                    }))
-                });
+                playHtmlAudioPattern(getSuccessToneConfig());
                 return;
             }
 
@@ -535,16 +694,7 @@ export function createAudioController() {
     function playExerciseEndSound() {
         withReadyAudioContext(ctx => {
             if (shouldPreferHtmlAudioPlayback()) {
-                playHtmlAudioPattern({
-                    totalDurationSeconds: 0.36,
-                    masterVolume: 0.38,
-                    waveType: 'triangle',
-                    events: [
-                        { frequency: 440, startSeconds: 0, durationSeconds: 0.16, gain: 1 },
-                        { frequency: 660, startSeconds: 0.1, durationSeconds: 0.16, gain: 0.95 },
-                        { frequency: 880, startSeconds: 0.2, durationSeconds: 0.16, gain: 0.9 }
-                    ]
-                });
+                playHtmlAudioPattern(getExerciseEndToneConfig());
                 return;
             }
 
@@ -580,7 +730,9 @@ export function createAudioController() {
             pendingPlaybackTasks: pendingPlaybackTasks.length,
             iosWebkitAudioEnvironment: isIosWebkitAudioEnvironment(),
             htmlAudioState,
-            htmlUnmuteActive: !!htmlUnmuteAudio
+            htmlPatternAudioState,
+            htmlUnmuteActive: !!htmlUnmuteAudio,
+            htmlPatternPlayersPrimed: Array.from(htmlPatternPlayers.values()).filter(entry => entry.primed).length
         };
     }
 

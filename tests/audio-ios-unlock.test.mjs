@@ -137,8 +137,11 @@ class FakeHtmlAudioElement {
     this.preload = 'auto';
     this.playsInline = true;
     this.src = '';
+    this.currentTime = 0;
+    this.muted = false;
     this.attributes = new Map();
     this.playCount = 0;
+    this.__primed = false;
     createdHtmlAudioElements.push(this);
   }
 
@@ -156,14 +159,23 @@ class FakeHtmlAudioElement {
 
   play() {
     return new Promise((resolve, reject) => {
-      if (!gestureActive && !htmlAudioUnlocked) {
-        reject(new Error('NotAllowedError'));
+      if (gestureActive) {
+        this.playCount += 1;
+        this.__primed = true;
+        if (this.loop) {
+          htmlAudioUnlocked = true;
+        }
+        resolve();
         return;
       }
 
-      this.playCount += 1;
-      htmlAudioUnlocked = true;
-      resolve();
+      if (this.__primed || (this.loop && htmlAudioUnlocked)) {
+        this.playCount += 1;
+        resolve();
+        return;
+      }
+
+      reject(new Error('NotAllowedError'));
     });
   }
 }
